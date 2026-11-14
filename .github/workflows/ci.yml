@@ -13,8 +13,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        python-version: ["3.9", "3.12"]
+        include:
+          # ubuntu-latest 已经升到 26.04，没有 3.9 的构建，只能钉在 22.04
+          - os: ubuntu-22.04
+            python-version: "3.9"
+          - os: ubuntu-latest
+            python-version: "3.10"
+          - os: ubuntu-latest
+            python-version: "3.12"
+          - os: windows-latest
+            python-version: "3.9"
+          - os: windows-latest
+            python-version: "3.12"
     steps:
       - uses: actions/checkout@v4
 
@@ -41,16 +51,38 @@ jobs:
       - name: 安装
         run: python -m pip install -e .
 
-      - name: 对一个真的会抖的套件跑 4 次
+      - name: 对一个真会抖的套件，必须检测出 flaky（退出码 1）
         run: |
-          mkdir -p /tmp/suite
-          cat > /tmp/suite/t.py <<'PY'
+          mkdir -p /tmp/flaky
+          cat > /tmp/flaky/t.py <<'PY'
           import pathlib, sys
-          counter = pathlib.Path("/tmp/suite/count")
+          counter = pathlib.Path("/tmp/flaky/count")
           n = int(counter.read_text()) if counter.exists() else 0
           counter.write_text(str(n + 1))
           if n % 2 == 0:
-              print("not ok 1 - sometimes_fails"); sys.exit(1)
+              print("not ok 1 - sometimes_fails")
+              sys.exit(1)
           print("ok 1 - sometimes_fails")
           PY
-          flakyfinder run --runs 4 --format tap --fail-on-flaky -- "python /tmp/suite/t.py"
+
+          set +e
+          flakyfinder run --runs 4 --format tap --fail-on-flaky -- "python /tmp/flaky/t.py"
+          code=$?
+          set -e
+
+          if [ "$code" -ne 1 ]; then
+            echo "::error::期望退出码 1（检测到 flaky），实际 $code"
+            exit 1
+          fi
+          echo "退出码 1，符合预期"
+
+      - name: 对稳定的套件，必须退出 0
+        run: |
+          mkdir -p /tmp/stable
+          cat > /tmp/stable/t.py <<'PY'
+          print("ok 1 - always_ok")
+          print("ok 2 - also_ok")
+          PY
+
+          flakyfinder run --runs 3 --format tap --fail-on-flaky -- "python /tmp/stable/t.py"
+          echo "退出码 0，符合预期"
