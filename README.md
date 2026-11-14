@@ -12,7 +12,7 @@
 
 ---
 
-## 装
+## 安装
 
 ```bash
 pip install -e .
@@ -22,7 +22,7 @@ pip install -e .
 
 ---
 
-## 用
+## 用法
 
 ```bash
 flakyfinder run --runs 10 -- pytest -q
